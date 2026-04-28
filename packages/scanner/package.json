@@ -1,0 +1,20 @@
+{
+  "name": "@solana-devfix-ai/scanner",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@solana-devfix-ai/rules": "0.1.0",
+    "@solana-devfix-ai/shared": "0.1.0",
+    "fast-glob": "^3.3.2",
+    "fs-extra": "^11.2.0",
+    "simple-git": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4"
+  }
+}

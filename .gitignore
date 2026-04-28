@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/
+.next/
+target/
+.env
+*.tsbuildinfo
+coverage/
+tmp/
