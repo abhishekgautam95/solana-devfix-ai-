@@ -1,32 +1,47 @@
 # Solana DevFix AI
 
-Solana DevFix AI is a deterministic security scanner for public GitHub repositories that contain Solana, Anchor, or Rust code. It clones a repo into a temporary directory, classifies the project, scans Rust files with rule-based checks, and shows a structured security report in a Next.js dashboard.
+Deterministic security scanning for public Solana, Anchor, and Rust repositories.
 
-This project currently does not use OpenAI APIs and does not create GitHub pull requests. The scanner is intentionally deterministic.
+Solana DevFix AI clones a public GitHub repository into a temporary directory, classifies the project, scans Rust source files with rule-based checks, and presents the results in a clean Next.js dashboard. It is designed as an early-warning tool for common Solana and Anchor security patterns, not as a replacement for a full audit.
 
-## Current Features
+## Status
 
-- Public GitHub repo scanning through `POST /scan`
-- Safe shallow clone into an operating system temp directory
-- Project classification: `anchor`, `solana-rust`, `rust-only`, `unsupported`
-- Detection details for repo structure and signals
-- Rule-based Rust scanner for common Solana/Anchor security risks
-- Risk score with weighted issue severity
-- Next.js dashboard with loading, error, empty, and report states
+This repository currently includes:
 
-## Workspace Layout
+- A TypeScript/Express scanner API
+- A Next.js dashboard
+- Deterministic rule-based scanning
+- Project classification and detection details
+- Weighted risk scoring
+- API and scanner documentation
+
+This version does not use LLM APIs, execute repository code, or create GitHub pull requests.
+
+## Features
+
+- Scan public GitHub repositories with `POST /scan`
+- Shallow-clone repositories into OS-managed temporary storage
+- Detect `anchor`, `solana-rust`, `rust-only`, and `unsupported` project types
+- Report structural detection signals such as `Anchor.toml`, `Cargo.toml`, Rust files, Solana imports, and tests
+- Identify common Solana/Anchor security concerns with deterministic rules
+- Produce a structured JSON report with severity, file path, line number, description, and recommendation
+- Display risk score, severity breakdown, issue list, loading states, empty states, and error states in the dashboard
+
+## Architecture
 
 ```text
 apps/
-  api/        Express API server
-  web/        Next.js dashboard
+  api/          Express API server
+  web/          Next.js dashboard
+
 packages/
-  scanner/    GitHub clone, project detection, scan orchestration
-  rules/      Deterministic security rules
-  shared/     Zod schemas and shared TypeScript types
+  scanner/      Repository cloning, project detection, scan orchestration
+  rules/        Deterministic security rules
+  shared/       Shared Zod schemas and TypeScript types
+
 docs/
-  API.md
-  SCANNER.md
+  API.md        API contract and example responses
+  SCANNER.md    Detection, rules, scoring, and limitations
 ```
 
 ## Tech Stack
@@ -41,46 +56,48 @@ docs/
 - fs-extra
 - fast-glob
 
-## Setup
+## Quick Start
+
+Install dependencies:
 
 ```bash
 npm install
 ```
 
-## Build
+Build the API packages and web dashboard:
 
 ```bash
 npm run build
 ```
 
-Builds the TypeScript backend packages and the Next.js frontend.
-
-## Run Locally
-
-Use two terminals:
+Run the backend API:
 
 ```bash
 npm run dev:api
 ```
 
+Run the web dashboard in a second terminal:
+
 ```bash
 npm run dev:web
 ```
 
-Defaults:
-
-- API: `http://127.0.0.1:3000`
-- Web dashboard: `http://127.0.0.1:3001`
-
-Open the dashboard at:
+Open:
 
 ```text
 http://127.0.0.1:3001
 ```
 
-## Environment
+Default services:
 
-Copy the example env file if you want to customize ports or the frontend proxy target.
+| Service | URL |
+| --- | --- |
+| API | `http://127.0.0.1:3000` |
+| Dashboard | `http://127.0.0.1:3001` |
+
+## Configuration
+
+Create a local environment file if you need to customize ports or the scanner API target:
 
 ```bash
 cp .env.example .env
@@ -95,7 +112,7 @@ SCAN_TIMEOUT_MS=120000
 SCAN_API_URL=http://127.0.0.1:3000/scan
 ```
 
-## API Usage
+## API Example
 
 Call the Express API directly:
 
@@ -105,7 +122,7 @@ curl -s -X POST http://127.0.0.1:3000/scan \
   -d '{"repoUrl":"https://github.com/solana-foundation/anchor"}'
 ```
 
-When the web app is running, it also exposes a proxy route:
+Or call the Next.js proxy route used by the dashboard:
 
 ```bash
 curl -s -X POST http://127.0.0.1:3001/api/scan \
@@ -113,71 +130,79 @@ curl -s -X POST http://127.0.0.1:3001/api/scan \
   -d '{"repoUrl":"https://github.com/solana-foundation/anchor"}'
 ```
 
-See [docs/API.md](docs/API.md) for the full request and response contract.
+See [docs/API.md](docs/API.md) for the complete request and response contract.
 
-## Project Detection
+## Project Classification
 
-The scanner returns one of four project types:
+The scanner classifies repositories into one of four project types.
 
-- `anchor`: `Anchor.toml` exists, or `programs/` contains an Anchor-style `src/lib.rs`
-- `solana-rust`: Rust files contain Solana-specific imports such as `solana_program`, `anchor_lang`, `spl_token`, `solana_sdk`, `Pubkey`, or `pubkey`
-- `rust-only`: Rust files exist, but no Solana-specific imports were found
-- `unsupported`: no Rust files and no Solana or Anchor signals were found
+| Project Type | Meaning |
+| --- | --- |
+| `anchor` | `Anchor.toml` exists, or `programs/` contains an Anchor-style `src/lib.rs` |
+| `solana-rust` | Rust files contain Solana-specific imports or identifiers |
+| `rust-only` | Rust files exist, but no Solana-specific imports were found |
+| `unsupported` | No Rust files and no Solana or Anchor signals were found |
 
-The UI labels these as:
+The dashboard displays these labels as:
 
 - `ANCHOR PROJECT`
 - `SOLANA RUST`
 - `RUST ONLY`
 - `UNSUPPORTED`
 
-See [docs/SCANNER.md](docs/SCANNER.md) for detection details, rule behavior, and scoring.
+See [docs/SCANNER.md](docs/SCANNER.md) for detailed detection rules.
 
 ## Security Rules
 
-- `unchecked-account`: detects `UncheckedAccount<'info>`
-- `account-info`: detects `AccountInfo<'info>`
-- `possible-missing-signer`: detects Anchor account structs that appear authority-sensitive but do not include `Signer<'info>`
-- `unsafe-arithmetic`: detects arithmetic operators in Rust files containing `amount`, `balance`, `token`, `withdraw`, or `deposit`
-- `missing-tests-folder`: detects missing `tests`, `test`, or `programs/**/tests` folders with severity based on project type
-- `possible-missing-pda-validation`: detects PDA-like Anchor account fields without visible `seeds` and `bump` constraints
+Current deterministic rules:
+
+| Rule | Purpose |
+| --- | --- |
+| `unchecked-account` | Detects `UncheckedAccount<'info>` usage |
+| `account-info` | Detects raw `AccountInfo<'info>` usage |
+| `possible-missing-signer` | Flags authority-sensitive Anchor account structs without `Signer<'info>` |
+| `unsafe-arithmetic` | Flags arithmetic on token, amount, balance, withdraw, or deposit values |
+| `missing-tests-folder` | Flags missing test directories with project-aware severity |
+| `possible-missing-pda-validation` | Flags PDA-like Anchor accounts without visible `seeds` and `bump` constraints |
 
 ## Risk Scoring
 
-Each issue contributes to the total score:
+Each issue contributes points to a capped score of `100`.
 
-- `critical`: +35
-- `high`: +25
-- `medium`: +12
-- `low`: +5
-- `info`: +2
+| Severity | Points |
+| --- | ---: |
+| `critical` | 35 |
+| `high` | 25 |
+| `medium` | 12 |
+| `low` | 5 |
+| `info` | 2 |
 
-The maximum risk score is capped at `100`.
+## Scripts
 
-## Important Limitations
+| Script | Description |
+| --- | --- |
+| `npm run build` | Build backend packages and the web dashboard |
+| `npm run build:api` | Build TypeScript backend packages only |
+| `npm run build:web` | Build the Next.js dashboard only |
+| `npm run dev:api` | Start the Express API |
+| `npm run dev:web` | Start the Next.js dashboard |
+| `npm run clean` | Clean TypeScript build output |
 
-- This is a static, rule-based scanner. It can produce false positives and false negatives.
-- It does not compile programs or run tests.
-- It does not inspect generated IDLs.
-- It does not analyze full control flow or data flow.
-- It only supports public GitHub HTTPS repository URLs.
-- It clones untrusted repositories but does not execute repository code.
+## Documentation
 
-## Troubleshooting
+- [API Reference](docs/API.md)
+- [Scanner Behavior](docs/SCANNER.md)
 
-If the web dashboard says the scanner API is unavailable, start the backend:
+## Security Model
 
-```bash
-npm run dev:api
-```
+The scanner treats repositories as untrusted input.
 
-If a repo shows `UNSUPPORTED`, check the detection details. The scanner needs Rust files or Solana/Anchor signals to classify it.
+- Repositories are shallow-cloned.
+- Repository code is not executed.
+- Clones are removed after scanning.
+- Generated and dependency directories are ignored.
 
-If a known Solana repo is classified as `rust-only`, inspect whether its Rust files contain imports such as `solana_program`, `anchor_lang`, `spl_token`, `solana_sdk`, `Pubkey`, or `pubkey`.
-
-## Cleanup Behavior
-
-Clones are created under the operating system temp directory and removed after each scan. The scanner ignores:
+Ignored paths:
 
 - `.git`
 - `node_modules`
@@ -185,3 +210,41 @@ Clones are created under the operating system temp directory and removed after e
 - `dist`
 - `build`
 - `.next`
+
+## Limitations
+
+- Static heuristics can produce false positives and false negatives.
+- The scanner does not compile Rust or Anchor programs.
+- The scanner does not run tests.
+- The scanner does not inspect generated IDLs.
+- The scanner does not perform full control-flow or data-flow analysis.
+- Only public GitHub HTTPS repository URLs are supported.
+
+Use the report as a prioritization aid before manual review, not as proof that a program is secure.
+
+## Troubleshooting
+
+If the dashboard reports that the scanner API is unavailable, start the backend:
+
+```bash
+npm run dev:api
+```
+
+If a repository is classified as `UNSUPPORTED`, review the detection details in the dashboard. The scanner needs Rust files or Solana/Anchor signals to classify a repository.
+
+If a known Solana repository is classified as `RUST ONLY`, check whether its Rust files contain imports or identifiers such as `solana_program`, `anchor_lang`, `spl_token`, `solana_sdk`, `Pubkey`, or `pubkey`.
+
+## Roadmap
+
+Potential next phases:
+
+- Add focused unit tests for detection and rule behavior
+- Add more Solana-specific static rules
+- Add repository scan history
+- Add authenticated GitHub integration
+- Add optional PR generation
+- Add AI-assisted explanations after deterministic findings are stable
+
+## License
+
+No license has been added yet. Add one before distributing or accepting external contributions.
